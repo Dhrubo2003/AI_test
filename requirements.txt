@@ -1,7 +1,7 @@
 streamlit
 torch
 transformers
-accelerate
 pandas
 matplotlib
+sqlalchemy
 psycopg2-binary
