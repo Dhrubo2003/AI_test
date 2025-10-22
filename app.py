@@ -19,7 +19,7 @@ st.info(f"Using device: {device_name.upper()}")
 # ------------------------------
 # 🧠 Load Model
 # ------------------------------
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def load_model():
     model_name = "microsoft/phi-3-mini-4k-instruct"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -133,4 +133,5 @@ if st.button("Generate SQL") and prompt.strip() != "":
 
         df = run_sql_query(sql_query)
         visualize(df)
+
 
