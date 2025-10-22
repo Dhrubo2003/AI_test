@@ -12,22 +12,19 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 # ------------------------------
 # 🚀 GPU Setup
 # ------------------------------
-if torch.cuda.is_available():
-    device = "cuda"
-    dtype = torch.float16
-else:
-    device = "cpu"
-    dtype = torch.float32
+device_name = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device_name == "cuda" else torch.float32
+st.info(f"Using device: {device_name.upper()}")
 
 # ------------------------------
 # 🧠 Load Model
 # ------------------------------
-@st.cache_resource
+@st.cache_resource(show_spinner=True, allow_output_mutation=True)
 def load_model():
     model_name = "microsoft/phi-3-mini-4k-instruct"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype, device_map=device)
-    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device_map=device)
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype, device_map=device_name)
+    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=0 if device_name=="cuda" else -1)
     return pipe
 
 pipe = load_model()
@@ -42,12 +39,15 @@ database = st.sidebar.text_input("Database", "olist")
 user = st.sidebar.text_input("User", "postgres")
 password = st.sidebar.text_input("Password", type="password")
 
-# Create engine
-engine = None
+if "engine" not in st.session_state:
+    st.session_state.engine = None
+
 if st.sidebar.button("🔗 Connect to Database"):
     try:
-        engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}")
-        with engine.connect() as conn:
+        st.session_state.engine = create_engine(
+            f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+        )
+        with st.session_state.engine.connect() as conn:
             st.sidebar.success("✅ Connected successfully!")
     except Exception as e:
         st.sidebar.error(f"❌ Connection failed: {e}")
@@ -93,11 +93,11 @@ SQL:
 # 🧾 Execute SQL Query
 # ------------------------------
 def run_sql_query(query):
-    if not engine:
+    if not st.session_state.engine:
         st.error("⚠️ Please connect to your PostgreSQL database first.")
         return None
     try:
-        df = pd.read_sql_query(query, engine)
+        df = pd.read_sql_query(query, st.session_state.engine)
         return df
     except Exception as e:
         st.error(f"❌ SQL Execution Error: {e}")
@@ -120,12 +120,16 @@ def visualize(df):
 # ------------------------------
 st.title("🧠 Text-to-SQL with Phi-3-mini + PostgreSQL")
 
-prompt = st.text_area("Enter your question in English:", 
-    placeholder="e.g. Show me top 10 customers by total spending")
+prompt = st.text_area(
+    "Enter your question in English:",
+    placeholder="e.g. Show me top 10 customers by total spending"
+)
 
-if st.button("Generate SQL"):
-    sql_query = english_to_sql(prompt)
-    st.code(sql_query, language="sql")
+if st.button("Generate SQL") and prompt.strip() != "":
+    with st.spinner("Generating SQL and querying database..."):
+        sql_query = english_to_sql(prompt)
+        st.subheader("Generated SQL Query")
+        st.code(sql_query, language="sql")
 
-    df = run_sql_query(sql_query)
-    visualize(df)
+        df = run_sql_query(sql_query)
+        visualize(df)
